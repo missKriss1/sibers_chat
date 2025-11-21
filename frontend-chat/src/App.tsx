@@ -1,9 +1,17 @@
-function App() {
+import { useState } from "react";
+import { LoginContainer } from "./containers/LoginContainer";
+import { ChatContainer } from "./containers/ChatContainer";
+
+export const App = () => {
+  const [logged, setLogged] = useState(false);
 
   return (
-    <>
-    </>
-  )
-}
-
-export default App
+      <div className="relative min-h-screen">
+        {logged ? (
+            <ChatContainer />
+        ) : (
+            <LoginContainer onLogged={() => setLogged(true)} />
+        )}
+      </div>
+  );
+};
