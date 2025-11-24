@@ -2,34 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { wsClient } from "../api/ws";
 import { MessageList } from "../components/MessagesList.tsx";
 import { MessageInput } from "../components/MessagesInput.tsx";
-
-interface ChannelPayload {
-    _id?: string;
-    id?: string;
-    name: string;
-    owner: string;
-}
-
-type Channel = ChannelPayload & { _id: string };
-
-export interface User {
-    _id: string;
-    username: string;
-}
-
-interface MessagePayload {
-    _id?: string;
-    id?: string;
-    user: { _id?: string; username: string };
-    message: string;
-    createdAt?: string;
-}
-
-type Message = MessagePayload & { _id?: string };
-
-interface ChatProps {
-    currentUser: User;
-}
+import type {Channel, ChannelPayload, ChatProps, Message, MessagePayload, User} from "../types";
 
 const normalizeChannel = (channel: ChannelPayload): Channel => ({
     ...channel,

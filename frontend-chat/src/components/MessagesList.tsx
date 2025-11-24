@@ -1,12 +1,7 @@
-interface Message {
-    _id?: string;
-    user: { username: string };
-    message: string;
-    createdAt?: string;
-}
+import type {Messages} from "../types";
 
 interface Props {
-    messages: Message[];
+    messages: Messages[];
     currentUser: { username: string };
 }
 
@@ -30,7 +25,6 @@ export const MessageList = ({ messages, currentUser }: Props) => {
                             borderRadius: "12px",
                         }}
                     >
-                        {/* ХВОСТИК */}
                         <div
                             className={`absolute w-0 h-0 border-t-[10px] border-t-transparent 
                             border-b-[10px] border-b-transparent 
@@ -40,15 +34,12 @@ export const MessageList = ({ messages, currentUser }: Props) => {
                             }`}
                         />
 
-                        {/* Имя отправителя только для чужих */}
                         {!isMe && (
                             <p className="text-xs text-gray-400 mb-1">{m.user.username}</p>
                         )}
 
-                        {/* Текст */}
                         <p>{m.message}</p>
 
-                        {/* Время */}
                         <p
                             className={`mt-1 text-[10px] text-gray-300 
         ${isMe ? "text-right text-violet-200" : "text-left text-gray-300"}

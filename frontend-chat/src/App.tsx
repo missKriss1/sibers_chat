@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { LoginContainer } from "./containers/LoginContainer";
-import {ChatContainer, type User} from "./containers/ChatContainer";
+import {ChatContainer} from "./containers/ChatContainer";
+import type {User} from "./types";
 
 export const App = () => {
     const [logged, setLogged] = useState(false);
