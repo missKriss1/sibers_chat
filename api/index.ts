@@ -1,4 +1,3 @@
-// src/server.ts
 import express from "express";
 import expressWs from "express-ws";
 import cors from "cors";
@@ -18,16 +17,15 @@ const port = 8000;
 server.use(cors());
 server.use(express.json());
 
-// Тип клиента
 interface ClientInfo {
     ws: WS;
     userId: string;
+    username?: string;
     currentChannel?: string;
 }
 
 const connectedClients: ClientInfo[] = [];
 
-// Создание или получение главного канала General
 const getOrCreateGeneral = async (ownerId: string) => {
     let general = await Channel.findOne({ name: "General" });
     if (!general) {
@@ -50,7 +48,6 @@ server.ws("/chat", async (ws, req) => {
 
         if (!data.type) return;
 
-        // 🔹 LOGIN
         if (data.type === "LOGIN") {
             const user = await User.findOne({ username: data.payload });
 
@@ -59,8 +56,8 @@ server.ws("/chat", async (ws, req) => {
             }
 
             client.userId = user._id.toString();
+            client.username = user.username;
 
-            // Подключаем пользователя к General
             const general = await getOrCreateGeneral(user._id.toString());
 
             if (!general.participants.some(p => p.toString() === client.userId)){
@@ -76,75 +73,81 @@ server.ws("/chat", async (ws, req) => {
                 channelId: general._id.toString(),
             }));
 
-            const history = await Message.find({ channel: general._id.toString() })
+            const history = await Message.find({ channel: general._id })
                 .populate("user", "username avatar")
                 .sort({ createdAt: 1 });
 
             ws.send(JSON.stringify({ type: "CHANNEL_HISTORY", payload: history }));
 
-            // Отправляем список участников канала
             const participants = await User.find(
                 { _id: { $in: general.participants } },
                 "username avatar"
             );
 
+            ws.send(JSON.stringify({ type: "CHANNEL_USERS", payload: participants }));
+
             connectedClients.forEach(c => {
-                if (c.currentChannel === general._id.toString()) {
+                if (c.currentChannel === general._id.toString() && c.userId !== client.userId) {
                     c.ws.send(JSON.stringify({
-                        type: "CHANNEL_USERS",
-                        payload: participants,
+                        type: "USER_JOINED",
+                        payload: { userId: client.userId, username: user.username }
                     }));
                 }
             });
         }
 
-        // 🔹 JOIN_CHANNEL
-        if (data.type === "JOIN_CHANNEL") {
-            client.currentChannel = data.channelId;
-            const channel = await Channel.findById(data.channelId).populate("participants", "username avatar");
+        if (data.type === "GET_CHANNELS") {
+            const channels = await Channel.find();
+            ws.send(JSON.stringify({ type: "CHANNELS_LIST", payload: channels }));
+        }
 
+        if (data.type === "VIEW_CHANNEL") {
+            client.currentChannel = data.channelId;
+
+            const channel = await Channel.findById(data.channelId);
             if (!channel) return;
 
-            if (!channel.participants.some((p: any) => p._id.toString() === client.userId)) {
-                channel.participants.push(new mongoose.Types.ObjectId(client.userId));
-                await channel.save();
-            }
-
-            // Список участников
-            const participants = channel.participants.map((p: any) => ({
-                id: p._id.toString(),
-                username: p.username,
-                avatar: p.avatar,
-            }));
-
-            connectedClients.forEach(c => {
-                if (c.currentChannel === data.channelId) {
-                    c.ws.send(JSON.stringify({ type: "CHANNEL_USERS", payload: participants }));
-                }
-            });
-
-            // История сообщений
             const history = await Message.find({ channel: data.channelId })
                 .populate("user", "username avatar")
                 .sort({ createdAt: 1 });
 
             ws.send(JSON.stringify({ type: "CHANNEL_HISTORY", payload: history }));
 
-            // Уведомляем остальных о входе
+            const participants = await User.find(
+                { _id: { $in: channel.participants } },
+                "username avatar"
+            );
+
+            ws.send(JSON.stringify({ type: "CHANNEL_USERS", payload: participants }));
+        }
+
+        if (data.type === "SUBSCRIBE_TO_CHANNEL") {
+            const channel = await Channel.findById(data.channelId);
+            if (!channel) return;
+
+            const userObjectId = new mongoose.Types.ObjectId(client.userId);
+
+            if (!channel.participants.some(p => p.equals(userObjectId))) {
+                channel.participants.push(userObjectId);
+                await channel.save();
+            }
+
+            const participants = await User.find(
+                { _id: { $in: channel.participants } },
+                "username avatar"
+            );
+
             connectedClients.forEach(c => {
-                if (c.currentChannel === data.channelId && c.userId !== client.userId) {
+                if (c.currentChannel === data.channelId) {
+                    c.ws.send(JSON.stringify({ type: "CHANNEL_USERS", payload: participants }));
                     c.ws.send(JSON.stringify({
                         type: "USER_JOINED",
-                        payload: {
-                            userId: client.userId,
-                            username: (channel.participants as any).find((p:any)=>p._id.toString()===client.userId)?.username
-                        }
+                        payload: { userId: client.userId, username: client.username }
                     }));
                 }
             });
         }
 
-        // 🔹 SEND_MESSAGE
         if (data.type === "SEND_MESSAGE") {
             if (!client.currentChannel) return;
 
@@ -157,14 +160,18 @@ server.ws("/chat", async (ws, req) => {
             await newMsg.save();
             const populatedMsg = await newMsg.populate("user", "username avatar");
 
+            const msgToSend = {
+                ...populatedMsg.toObject(),
+                channel: populatedMsg.channel.toString(),
+            };
+
             connectedClients.forEach(c => {
                 if (c.currentChannel === client.currentChannel) {
-                    c.ws.send(JSON.stringify({ type: "NEW_MESSAGE", payload: populatedMsg }));
+                    c.ws.send(JSON.stringify({ type: "NEW_MESSAGE", payload: msgToSend }));
                 }
             });
         }
 
-        // 🔹 CREATE_CHANNEL
         if (data.type === "CREATE_CHANNEL") {
             const channel = new Channel({
                 name: data.name,
@@ -174,29 +181,50 @@ server.ws("/chat", async (ws, req) => {
             await channel.save();
 
             ws.send(JSON.stringify({ type: "CHANNEL_CREATED", payload: channel }));
+            const allChannels = await Channel.find();
+            connectedClients.forEach(c => {
+                c.ws.send(JSON.stringify({
+                    type: "CHANNELS_LIST",
+                    payload: allChannels
+                }));
+            });
         }
 
-        // 🔹 REMOVE_USER (только владелец)
         if (data.type === "REMOVE_USER") {
             const channel = await Channel.findById(data.channelId);
             if (!channel) return;
 
-            if (channel.owner?.toString() !== client.userId) return;
+            if (channel.owner?.toString() !== client.userId) {
+                return ws.send(JSON.stringify({ type: "ERROR", message: "Only owner can remove users" }));
+            }
 
-            channel.participants = channel.participants.filter(
-                id => id.toString() !== data.userId
-            );
+            const removedUserId = data.userId;
+            channel.participants = channel.participants.filter(id => id.toString() !== removedUserId);
             await channel.save();
 
-            const participants = await User.find({ _id: { $in: channel.participants } }, "username avatar");
+            const updatedParticipants = await User.find(
+                { _id: { $in: channel.participants } },
+                "username avatar"
+            );
+
             connectedClients.forEach(c => {
-                if (c.currentChannel === data.channelId) {
-                    c.ws.send(JSON.stringify({ type: "CHANNEL_USERS", payload: participants }));
+                if (c.currentChannel === channel._id.toString()) {
+                    c.ws.send(JSON.stringify({
+                        type: "CHANNEL_USERS",
+                        payload: updatedParticipants
+                    }));
+
+                    if (c.userId === removedUserId) {
+                        c.ws.send(JSON.stringify({
+                            type: "USER_LEFT",
+                            payload: { userId: removedUserId }
+                        }));
+                    }
                 }
             });
         }
 
-        // 🔹 SEARCH_USERS
+
         if (data.type === "SEARCH_USERS") {
             const found = await User.find(
                 { username: new RegExp(data.query, "i") },
@@ -219,9 +247,11 @@ server.ws("/chat", async (ws, req) => {
             await channel.save();
 
             const participants = await User.find({ _id: { $in: channel.participants } }, "username avatar");
+
             connectedClients.forEach(c => {
                 if (c.currentChannel === client.currentChannel) {
                     c.ws.send(JSON.stringify({ type: "CHANNEL_USERS", payload: participants }));
+
                     c.ws.send(JSON.stringify({ type: "USER_LEFT", payload: { userId: client.userId } }));
                 }
             });
@@ -229,7 +259,6 @@ server.ws("/chat", async (ws, req) => {
     });
 });
 
-// Seed users если база пуста
 const seedUsers = async () => {
     const count = await User.countDocuments();
     if (count === 0) {

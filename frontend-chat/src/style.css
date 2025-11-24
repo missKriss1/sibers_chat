@@ -4,5 +4,5 @@
 @tailwind utilities;
 
 body, html, #root {
-    @apply bg-gray-900 text-white min-h-screen font-mono;
+    @apply min-h-screen text-white bg-gradient-to-br from-gray-950 via-slate-900 to-violet-950 font-sans antialiased;
 }

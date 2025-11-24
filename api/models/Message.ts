@@ -16,7 +16,7 @@ const MessageSchema = new mongoose.Schema<HydratedDocument<MessageFields>, Messa
     channel: { type: mongoose.Schema.Types.ObjectId, ref: "Channel", required: true },
     message: { type: String, required: true },
     date: { type: Date, required: true, default: Date.now },
-});
+}, { timestamps: true });
 
 MessageSchema.set("toJSON", {
     transform: (doc, ret: Record<string, any>) => {
