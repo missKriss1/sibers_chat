@@ -32,3 +32,8 @@ type Message = MessagePayload & { _id?: string };
 export interface ChatProps {
     currentUser: User;
 }
+export interface EmojiData {
+    emoji: string;
+    name: string;
+    category: string;
+}

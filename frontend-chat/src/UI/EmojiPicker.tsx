@@ -1,10 +1,5 @@
 import { EmojiPicker } from "frimousse";
-
-interface EmojiData {
-    emoji: string;
-    name: string;
-    category: string;
-}
+import type {EmojiData} from "../types";
 
 interface EmojiPickerProps {
     onEmojiSelect: (emoji: string) => void;
