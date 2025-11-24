@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import { wsClient } from "../api/ws";
 import { MessageList } from "../components/MessagesList.tsx";
 import { MessageInput } from "../components/MessagesInput.tsx";
@@ -26,6 +26,7 @@ export const ChatContainer = ({ currentUser }: ChatProps) => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [newChannelName, setNewChannelName] = useState("");
     const [pendingChannelId, setPendingChannelId] = useState<string | null>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const isOwner = currentChannel?.owner === currentUser._id;
     const participantList =
@@ -61,6 +62,10 @@ export const ChatContainer = ({ currentUser }: ChatProps) => {
     const sendMessage = (text: string) => {
         if (!currentChannel) return;
         wsClient.sendMessage(text);
+    };
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
     useEffect(() => {
@@ -149,6 +154,10 @@ export const ChatContainer = ({ currentUser }: ChatProps) => {
         return () => window.clearTimeout(timeoutId);
     }, [userSearch]);
 
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
+
     return (
         <div className="flex h-screen bg-gray-900 text-white">
             <div className="w-64 border-r border-gray-700 p-4 flex flex-col">
@@ -185,6 +194,7 @@ export const ChatContainer = ({ currentUser }: ChatProps) => {
                         </div>
                         <div className="flex-1 overflow-y-auto p-4">
                             <MessageList messages={messages} currentUser={currentUser} />
+                            <div ref={messagesEndRef} />
                         </div>
                         <div className="p-4 border-t border-gray-700">
                             {isParticipant ? (
